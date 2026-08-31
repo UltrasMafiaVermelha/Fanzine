@@ -2,40 +2,194 @@
 <html lang="pt">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Fanzine — Agosto 2026</title>
   <style>
     * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; min-height: 100%; }
     body {
-      margin: 0;
       min-height: 100vh;
+      min-height: 100svh;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 24px;
+      padding: 14px;
+      overflow: hidden;
       font-family: Arial, sans-serif;
-      background: #111;
+      background: radial-gradient(circle at center, #303030 0%, #111 70%);
       color: #fff;
-      text-align: center;
     }
-    h1 { margin: 0 0 10px; font-size: 2rem; }
-    p { margin: 0 0 24px; opacity: .8; }
-    a {
-      display: inline-block;
-      padding: 14px 24px;
-      border-radius: 8px;
+    header { text-align: center; margin-bottom: 10px; z-index: 2; }
+    h1 { margin: 0 0 4px; font-size: clamp(1.1rem, 3vw, 1.8rem); }
+    #status { margin: 0; opacity: .75; font-size: .85rem; }
+    #book-wrap {
+      width: min(94vw, 1100px);
+      height: min(78vh, 780px);
+      height: min(78svh, 780px);
+      min-height: 300px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #book { margin: auto; }
+    .page {
+      background: white;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,.35);
+    }
+    .page canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    #controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 12px;
+      z-index: 2;
+    }
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 18px;
       background: #fff;
       color: #111;
-      text-decoration: none;
-      font-weight: bold;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 3px 12px rgba(0,0,0,.25);
     }
-    a:hover { opacity: .85; }
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: .4; cursor: default; transform: none; }
+    #loader { position: fixed; inset: 0; display: grid; place-items: center; background: #111; z-index: 10; }
+    #loader.hidden { display: none; }
+    .loader-box { text-align: center; padding: 24px; }
+    .spinner {
+      width: 42px; height: 42px; margin: 0 auto 14px;
+      border: 4px solid rgba(255,255,255,.2);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 700px) {
+      body { padding: 8px; }
+      header { margin-bottom: 5px; }
+      #book-wrap { width: 96vw; height: 78vh; height: 78svh; }
+      #controls { margin-top: 7px; }
+      button { padding: 9px 14px; }
+    }
   </style>
 </head>
 <body>
-  <h1>Fanzine — Agosto 2026</h1>
-  <p>Consulta a edição da Fanzine.</p>
-  <a href="Agosto%202026.pdf" target="_blank" rel="noopener">Abrir a Fanzine</a>
+  <div id="loader">
+    <div class="loader-box">
+      <div class="spinner"></div>
+      <div id="loaderText">A carregar a Fanzine…</div>
+    </div>
+  </div>
+
+  <header>
+    <h1>Fanzine — Agosto 2026</h1>
+    <p id="status">A preparar as páginas…</p>
+  </header>
+
+  <div id="book-wrap"><div id="book"></div></div>
+
+  <div id="controls">
+    <button id="prev" type="button">‹ Anterior</button>
+    <button id="next" type="button">Seguinte ›</button>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
+  <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+  <script type="module">
+    const pdfUrl = 'Agosto%202026.pdf';
+    const loader = document.getElementById('loader');
+    const loaderText = document.getElementById('loaderText');
+    const status = document.getElementById('status');
+    const book = document.getElementById('book');
+    const prev = document.getElementById('prev');
+    const next = document.getElementById('next');
+
+    try {
+      const pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+
+      const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+      status.textContent = `${pdf.numPages} páginas · toca, arrasta ou usa os botões para virar`;
+      loaderText.textContent = `A preparar ${pdf.numPages} páginas…`;
+
+      const pages = [];
+      let baseWidth = 600, baseHeight = 850;
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1 });
+        if (i === 1) { baseWidth = viewport.width; baseHeight = viewport.height; }
+
+        const div = document.createElement('div');
+        div.className = 'page';
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const scale = Math.min(2, Math.max(1, 1100 / viewport.width));
+        const renderViewport = page.getViewport({ scale });
+        canvas.width = Math.floor(renderViewport.width);
+        canvas.height = Math.floor(renderViewport.height);
+        div.appendChild(canvas);
+        book.appendChild(div);
+        pages.push(div);
+
+        await page.render({ canvasContext: ctx, viewport: renderViewport }).promise;
+        loaderText.textContent = `A preparar página ${i} de ${pdf.numPages}…`;
+      }
+
+      const ratio = baseHeight / baseWidth;
+      const wrap = document.getElementById('book-wrap');
+      const mobile = window.matchMedia('(max-width: 700px)').matches;
+      const maxHeight = wrap.clientHeight;
+      const maxWidth = wrap.clientWidth / (mobile ? 1 : 2);
+      const pageHeight = Math.min(maxHeight, maxWidth * ratio);
+      const pageWidth = pageHeight / ratio;
+
+      const pageFlip = new St.PageFlip(book, {
+        width: Math.max(280, Math.floor(pageWidth)),
+        height: Math.max(300, Math.floor(pageHeight)),
+        size: 'fixed',
+        minWidth: 220,
+        maxWidth: 900,
+        minHeight: 300,
+        maxHeight: 1200,
+        showCover: true,
+        drawShadow: true,
+        maxShadowOpacity: 0.35,
+        flippingTime: 850,
+        usePortrait: mobile,
+        startPage: 0,
+        mobileScrollSupport: false,
+        swipeDistance: 20,
+        clickEventForward: true
+      });
+
+      pageFlip.loadFromHTML(pages);
+      prev.addEventListener('click', () => pageFlip.flipPrev());
+      next.addEventListener('click', () => pageFlip.flipNext());
+      pageFlip.on('flip', (e) => {
+        const current = e.data + 1;
+        status.textContent = `Página ${current} de ${pdf.numPages} · arrasta para virar`;
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft') pageFlip.flipPrev();
+        if (e.key === 'ArrowRight' || e.key === ' ') pageFlip.flipNext();
+      });
+
+      loader.classList.add('hidden');
+    } catch (error) {
+      console.error(error);
+      loaderText.textContent = 'Não foi possível carregar a Fanzine.';
+      status.textContent = 'Erro ao carregar o PDF.';
+    }
+  </script>
 </body>
 </html>
